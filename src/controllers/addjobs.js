@@ -13,6 +13,7 @@ export const addJobs = async (data) => {
 				status: "applied",
 				applied_on: applied_on,
 			});
+			user.save();
 		} else {
 			await JobModel.create({
 				user_id: user_id,

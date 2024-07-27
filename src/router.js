@@ -18,12 +18,15 @@ import {updatePhone} from "./controllers/user-data/update/updatePhone.js";
 import {saveJob} from "./controllers/saveJob.js";
 import {removeSaved} from "./controllers/removeSaved.js";
 import {getSavedJobs} from "./controllers/getSavedJobs.js";
+import {appliedJobs} from "./controllers/getAppliedJobs.js";
+import {updateUserAvatar} from "./controllers/user-data/update/updateUserAvatar.js";
 
 const router = express.Router();
 
 router.get("/get-user/:id", getUser);
 router.get("/get-job/:id/:uid", getJob);
 router.get("/saved/:id", getSavedJobs);
+router.get("/get-applied-jobs/:id", appliedJobs);
 router.post("/create-user", createUser);
 router.post("/add-education", addEducation);
 router.post("/add-experience", addExperience);
@@ -39,6 +42,7 @@ router.post("/remove-education", removeEducation);
 router.post("/remove-experience", removeExperience);
 router.post("/remove-projects", removeProjects);
 router.post("/save-job", saveJob);
+router.post("/update-avatar", updateUserAvatar);
 router.patch("/unsave", removeSaved);
 
 export default router;

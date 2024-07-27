@@ -26,7 +26,7 @@ service.use("/user", router);
 
 db;
 
-// amqpConnect();
+amqpConnect();
 
 service.listen(PORT, () => {
 	log(

@@ -1,6 +1,7 @@
 import amqp from "amqplib/callback_api.js";
 import dotenv from "dotenv";
 import {addJobs} from "../controllers/addjobs.js";
+import {updateApplicationStatus} from "../controllers/updateApplicationStatus.js";
 
 dotenv.config();
 
@@ -18,6 +19,8 @@ export const amqpConnect = () => {
 		console.log("Waiting for data");
 		channel.bindQueue(q.queue, queue, "JOB_POST");
 		channel.bindQueue(q.queue, queue, "APPLY_JOB");
+		channel.bindQueue(q.queue, queue, "JOB_REJECTION");
+		channel.bindQueue(q.queue, queue, "UPDATE_APPLICATION_STATUS");
 		channel.consume(
 			q.queue,
 			(msg) => {
@@ -32,6 +35,9 @@ export const amqpConnect = () => {
 						break;
 					case "JOB_REJECTION":
 						rejection(JSON.parse(msg.content.toString()));
+						break;
+					case "UPDATE_APPLICATION_STATUS":
+						updateApplicationStatus(JSON.parse(msg.content.toString()));
 						break;
 					default:
 						break;
