@@ -86,7 +86,7 @@ const userSchema = new mongoose.Schema({
 	resume: {
 		type: String,
 	},
-	porfile_image: {
+	profile_image: {
 		type: String,
 	},
 	created_on: {
