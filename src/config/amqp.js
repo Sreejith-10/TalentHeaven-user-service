@@ -1,79 +1,118 @@
-import amqp from "amqplib/callback_api.js";
+import amqp from "amqplib";
 import dotenv from "dotenv";
-import {addJobs} from "../controllers/addjobs.js";
-import {updateApplicationStatus} from "../controllers/updateApplicationStatus.js";
-import {getJobPreferences} from "../controllers/getJobPreferences.js";
-import {user} from "../controllers/user.js";
+import { addJobs } from "../controllers/addjobs.js";
+import { updateApplicationStatus } from "../controllers/updateApplicationStatus.js";
+import { getJobPreferences } from "../controllers/getJobPreferences.js";
+import { user } from "../controllers/user.js";
+import { log } from "../lib/log.js";
+import chalk from "chalk";
 
 dotenv.config();
 
-let queue = "job_service_queue";
+let queue = "user_service_queue";
 let channel = null;
 
 const routingKeys = [
-	"JOB_POST",
-	"APPLY_JOB",
-	"JOB_REJECTION",
-	"UPDATE_APPLICATION_STATUS",
-	"USER_PREFERENCES",
-	"USER_PREFERENCES_REPLY",
-	"USER_DATA",
-	"USER_DATA_REPLY",
+  "JOB_POST",
+  "APPLY_JOB",
+  "JOB_REJECTION",
+  "UPDATE_APPLICATION_STATUS",
+  "USER_PREFERENCES",
+  "USER_PREFERENCES_REPLY",
+  "USER_DATA",
+  "USER_DATA_REPLY",
 ];
 
-export const amqpConnect = () => {
-	amqp.connect(process.env.AMQP_URL, async (err0, connection) => {
-		if (err0) {
-			throw err0;
-		}
-		channel = await connection.createChannel();
-		await channel.assertExchange(queue, "direct", {durable: false});
-		const q = await channel.assertQueue("", {exclusive: true});
-		console.log("Waiting for data");
-		routingKeys.forEach((route) => {
-			channel.bindQueue(q.queue, queue, route);
-		});
+const amqpConnect = async () => {
+  try {
+    const connection = await amqp.connect(process.env.AMQP_URL)
+    log(
+      chalk.bold.yellowBright(
+        "Connected to AMQP Server",
+      ),
+    )
 
-		channel.consume(
-			q.queue,
-			(msg) => {
-				const key = msg.fields.routingKey;
+    channel = await connection.createChannel();
+    await channel.assertQueue(queue, { durable: true });
+    console.log("Waiting for data");
 
-				switch (key) {
-					case "JOB_POST":
-						console.log(msg.content.toString());
-						break;
-					case "APPLY_JOB":
-						addJobs(JSON.parse(msg.content.toString()));
-						break;
-					case "JOB_REJECTION":
-						rejection(JSON.parse(msg.content.toString()));
-						break;
-					case "UPDATE_APPLICATION_STATUS":
-						updateApplicationStatus(JSON.parse(msg.content.toString()));
-						break;
-					case "USER_PREFERENCES":
-						const {uid, replyQueue} = JSON.parse(msg.content.toString());
-						getJobPreferences(uid, replyQueue);
-						break;
-					case "USER_DATA":
-						user(JSON.parse(msg.content.toString()));
-						break;
-					default:
-						break;
-				}
-			},
-			{noAck: true}
-		);
-	});
+    channel.consume(
+      queue,
+      async (msg) => {
+        const { action, body } = JSON.parse(msg.content.toString())
+        const responseState = {}
+
+        switch (action) {
+          case "JOB_POST":
+            console.log(msg.content.toString());
+            break;
+          case "APPLY_JOB":
+            const res = await addJobs(body);
+            responseState = res ?? responseState
+            break;
+          case "JOB_REJECTION":
+            rejection(body);
+            responseData = res ?? responseData
+            break;
+          case "UPDATE_APPLICATION_STATUS":
+            updateApplicationStatus(data);
+            responseData = res ?? responseData
+            break;
+          case "USER_PREFERENCES":
+            const preferences = await getJobPreferences(body.uid);
+            responseData = preferences ?? responseData
+            break;
+          case "USER_DATA":
+            user(msg);
+            responseData = res ?? responseData
+            break;
+          default:
+            break;
+        }
+
+        await channel.sendToQueue(msg.properties.replyTo, Buffer.from(JSON.stringify(responseState)), {
+          correlationId: msg.properties.correlationId
+        })
+
+        channel.ack(msg)
+      },
+      { noAck: false }
+    );
+  }
+  catch (err) {
+    console.log(err)
+  }
 };
 
-export async function sendToQueue(key, data) {
-	let msg = JSON.stringify(data);
-	await channel.publish(queue, key, Buffer.from(msg));
-	console.log(`Sent :  to queue:${queue}`);
-	// setTimeout(() => {
-	// 	connection.close();
-	// 	process.exit(0);
-	// }, 500);
-}
+const sendToQueue = (targetQueue, data) => {
+  return new Promise((resolve, reject) => {
+    const uuid = crypto.randomUUID();
+
+    const timeout = setTimeout(() => {
+      reject(new Error("Request timed out"))
+    }, 5000);
+
+    const consumer = (msg) => {
+      if (msg.properties.correlationId === uuid) {
+        clearTimeout(timeout)
+        channel.cancel(msg.fields.consumerTag)
+        resolve(msg.content.toString())
+      }
+    }
+
+    channel.consume(
+      queue, consumer,
+      { noAck: true }
+    ).then(() => {
+      channel.sendToQueue(targetQueue, Buffer.from(JSON.stringify(data)), {
+        replyTo: queue,
+        correlationId: uuid,
+      });
+    }).catch((err) => {
+      clearTimeout(timeout)
+      reject(err)
+    })
+  });
+};
+
+export { amqpConnect, sendToQueue }
