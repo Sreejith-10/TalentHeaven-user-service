@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  user-service-db:
+    image: mongo:6
+    container_name: user-service-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - user-service-db-data:/data/db
+    networks:
+        - shared-network
+
+    user-service:
+      build:
+        context: .
+      container_name: user-service
+      ports:
+        - "3003:3003"
+      environment:
+        AMQP_URL: amqp://user:password@rabbitmq:5672
+        MONGO_URI:  mongodb://127.0.0.1:27017/talent_heaven
+      depends_on:
+        - user-service-db
+      networks:
+          - shared-network
+
+networks:
+  shared-network:
+    external: true
+
+volumes:
+    user-service-db-data:
